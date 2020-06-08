@@ -107,6 +107,8 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
 
     IFCMService mService;
 
+    DatabaseReference driversAvailable;
+
     PlacesClient placesClient;
     List<Place.Field> placeFields = Arrays.asList(Place.Field.ID, Place.Field.NAME, Place.Field.LAT_LNG);
     AutocompleteSupportFragment place_location, place_destination;
@@ -134,8 +136,10 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
 
+        //Maps
         mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+
 
         imgExpandable = (ImageView) findViewById(R.id.imgExpandable);
         mBottomSheet = BottomSheetRiderFragment.newInstance("Rider bottom sheet");
@@ -318,6 +322,19 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         }
         mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
         if (mLastLocation != null) {
+            //Presense system
+            driversAvailable = FirebaseDatabase.getInstance().getReference(Common.driver_tbl);
+            driversAvailable.addValueEventListener(new ValueEventListener() {
+                @Override
+                public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                    loadAllAvailableDriver();
+                }
+
+                @Override
+                public void onCancelled(@NonNull DatabaseError databaseError) {
+
+                }
+            });
 
             final double latitude = mLastLocation.getLatitude();
             final double longitude = mLastLocation.getLongitude();
@@ -341,6 +358,10 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
     }
 
     private void loadAllAvailableDriver() {
+        mMap.clear();
+        mMap.addMarker(new MarkerOptions().position(new LatLng(mLastLocation.getLatitude(),mLastLocation.getLongitude())).title("Вы"));
+
+
         DatabaseReference driverLocation = FirebaseDatabase.getInstance().getReference(Common.driver_tbl);
         GeoFire gf = new GeoFire(driverLocation);
 
