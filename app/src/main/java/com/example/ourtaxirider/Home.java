@@ -13,7 +13,12 @@ import android.widget.Toast;
 
 import com.example.ourtaxirider.Common.Common;
 import com.example.ourtaxirider.Helper.CustomInfoWindow;
+import com.example.ourtaxirider.Model.FCMResponse;
+import com.example.ourtaxirider.Model.Notification;
 import com.example.ourtaxirider.Model.Rider;
+import com.example.ourtaxirider.Model.Sender;
+import com.example.ourtaxirider.Model.Token;
+import com.example.ourtaxirider.Remote.IFCMService;
 import com.firebase.geofire.GeoFire;
 import com.firebase.geofire.GeoLocation;
 import com.firebase.geofire.GeoQuery;
@@ -32,11 +37,11 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.libraries.places.api.model.Place;
 import com.google.android.libraries.places.api.net.PlacesClient;
 import com.google.android.libraries.places.widget.AutocompleteSupportFragment;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.navigation.NavigationView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
@@ -44,6 +49,9 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.iid.FirebaseInstanceId;
+import com.google.firebase.iid.InstanceIdResult;
+import com.google.gson.Gson;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -58,6 +66,10 @@ import androidx.appcompat.widget.Toolbar;
 
 import java.util.Arrays;
 import java.util.List;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class Home extends AppCompatActivity implements OnMapReadyCallback,
         GoogleApiClient.ConnectionCallbacks,
@@ -93,6 +105,8 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
     int distance = 1;
     private static final int LIMIT = 3;
 
+    IFCMService mService;
+
     PlacesClient placesClient;
     List<Place.Field> placeFields = Arrays.asList(Place.Field.ID, Place.Field.NAME, Place.Field.LAT_LNG);
     AutocompleteSupportFragment place_location, place_destination;
@@ -105,6 +119,8 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         setContentView(R.layout.activity_home);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+
+        mService = Common.getFCMService();
 
         DrawerLayout drawer = findViewById(R.id.drawer_layout);
         NavigationView navigationView = findViewById(R.id.nav_view);
@@ -133,12 +149,75 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         btnPickupRequest.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                requestPickupHere(FirebaseAuth.getInstance().getCurrentUser().getUid());
+                if(!isDriverFound)
+                    requestPickupHere(FirebaseAuth.getInstance().getCurrentUser().getUid());
+                else
+                    sendRequestToDriver(driverId);
             }
         });
 
 
         setUpLocation();
+
+        updateFirebaseToken();
+    }
+
+    private void updateFirebaseToken() {
+        FirebaseDatabase db = FirebaseDatabase.getInstance();
+        final DatabaseReference tokens = db.getReference(Common.token_tbl);
+        FirebaseInstanceId.getInstance().getInstanceId().addOnSuccessListener(new OnSuccessListener<InstanceIdResult>() {
+            @Override
+            public void onSuccess(InstanceIdResult instanceIdResult) {
+                Token token = new Token(instanceIdResult.getToken());
+                tokens.child(FirebaseAuth.getInstance().getCurrentUser().getUid()).setValue(token);
+            }
+        })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Log.e("ERROR_TOKEN", e.getMessage());
+                        Toast.makeText(Home.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
+
+    private void sendRequestToDriver(String driverId) {
+        DatabaseReference tokens = FirebaseDatabase.getInstance().getReference(Common.token_tbl);
+        tokens.orderByKey().equalTo(driverId)
+                .addListenerForSingleValueEvent(new ValueEventListener() {
+                    @Override
+                    public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                        for (DataSnapshot postSnapShot : dataSnapshot.getChildren()) {
+                            Token token = postSnapShot.getValue(Token.class);
+
+                            String json_lat_lng = new Gson().toJson(new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude()));
+                            String riderToken = FirebaseInstanceId.getInstance().getToken();
+                            Notification data = new Notification(riderToken, json_lat_lng);
+                            Sender content = new Sender(token.getToken(), data);
+
+                            mService.sendMessage(content)
+                                    .enqueue(new Callback<FCMResponse>() {
+                                        @Override
+                                        public void onResponse(Call<FCMResponse> call, Response<FCMResponse> response) {
+                                            if (response.body().success == 1)
+                                                Toast.makeText(Home.this, "Запрос отправлен!", Toast.LENGTH_SHORT).show();
+                                            else
+                                                Toast.makeText(Home.this, "Ошибка!", Toast.LENGTH_SHORT).show();
+                                        }
+
+                                        @Override
+                                        public void onFailure(Call<FCMResponse> call, Throwable t) {
+                                            Log.e("ERROR", t.getMessage());
+                                        }
+                                    });
+                        }
+                    }
+
+                    @Override
+                    public void onCancelled(@NonNull DatabaseError databaseError) {
+
+                    }
+                });
     }
 
     private void requestPickupHere(String uid) {
