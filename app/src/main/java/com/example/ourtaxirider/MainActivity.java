@@ -14,6 +14,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.RelativeLayout;
 
+import com.example.ourtaxirider.Common.Common;
 import com.example.ourtaxirider.Model.Rider;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
@@ -53,7 +54,7 @@ public class MainActivity extends AppCompatActivity {
         //Init Firebase
         auth = FirebaseAuth.getInstance();
         db = FirebaseDatabase.getInstance();
-        users = db.getReference("Riders");
+        users = db.getReference(Common.user_rider_tbl);
         //Init View
         btnRegister = (Button)findViewById(R.id.btnRegister);
         btnSignIn = (Button)findViewById(R.id.btnSignIn);

@@ -11,9 +11,13 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.Toast;
 
+import com.example.ourtaxirider.Common.Common;
 import com.example.ourtaxirider.Helper.CustomInfoWindow;
+import com.example.ourtaxirider.Model.Rider;
 import com.firebase.geofire.GeoFire;
 import com.firebase.geofire.GeoLocation;
+import com.firebase.geofire.GeoQuery;
+import com.firebase.geofire.GeoQueryEventListener;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -35,9 +39,11 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.navigation.NavigationView;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -56,8 +62,7 @@ import java.util.List;
 public class Home extends AppCompatActivity implements OnMapReadyCallback,
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener,
-        LocationListener
-        {
+        LocationListener {
     SupportMapFragment mapFragment;
 
     private GoogleMap mMap;
@@ -82,9 +87,15 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
     BottomSheetRiderFragment mBottomSheet;
     Button btnPickupRequest;
 
+    boolean isDriverFound = false;
+    String driverId = "";
+    int radius = 1;
+    int distance = 1;
+    private static final int LIMIT = 3;
+
     PlacesClient placesClient;
     List<Place.Field> placeFields = Arrays.asList(Place.Field.ID, Place.Field.NAME, Place.Field.LAT_LNG);
-    AutocompleteSupportFragment place_location,place_destination;
+    AutocompleteSupportFragment place_location, place_destination;
 
     private AppBarConfiguration mAppBarConfiguration;
 
@@ -107,14 +118,10 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
 
-        mapFragment = (SupportMapFragment)getSupportFragmentManager().findFragmentById(R.id.map);
+        mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
 
-        //Geo Fire
-        ref = FirebaseDatabase.getInstance().getReference("Drivers");
-        geoFire = new GeoFire(ref);
-
-        imgExpandable = (ImageView)findViewById(R.id.imgExpandable);
+        imgExpandable = (ImageView) findViewById(R.id.imgExpandable);
         mBottomSheet = BottomSheetRiderFragment.newInstance("Rider bottom sheet");
         imgExpandable.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -122,7 +129,7 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
                 mBottomSheet.show(getSupportFragmentManager(), mBottomSheet.getTag());
             }
         });
-        btnPickupRequest = (Button)findViewById(R.id.btnPickup) ;
+        btnPickupRequest = (Button) findViewById(R.id.btnPickup);
         btnPickupRequest.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -135,7 +142,7 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
     }
 
     private void requestPickupHere(String uid) {
-        DatabaseReference dbRequest = FirebaseDatabase.getInstance().getReference("PickupRequest");
+        DatabaseReference dbRequest = FirebaseDatabase.getInstance().getReference(Common.pickup_request_tbl);
         GeoFire mGeoFire = new GeoFire(dbRequest);
         mGeoFire.setLocation(uid, new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()));
 
@@ -149,17 +156,57 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         mUserMarker.showInfoWindow();
 
         btnPickupRequest.setText("Поиск водителя ...");
+        findDriver();
     }
 
+    private void findDriver() {
+        final DatabaseReference drivers = FirebaseDatabase.getInstance().getReference(Common.driver_tbl);
+        GeoFire gfDrivers = new GeoFire(drivers);
+
+        GeoQuery geoQuery = gfDrivers.queryAtLocation(new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()), radius);
+        geoQuery.removeAllListeners();
+        geoQuery.addGeoQueryEventListener(new GeoQueryEventListener() {
             @Override
+            public void onKeyEntered(String key, GeoLocation location) {
+                if (!isDriverFound) {
+                    isDriverFound = true;
+                    driverId = key;
+                    btnPickupRequest.setText("Вызвать водителя");
+                    Toast.makeText(Home.this, "" + key, Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onKeyExited(String key) {
+
+            }
+
+            @Override
+            public void onKeyMoved(String key, GeoLocation location) {
+
+            }
+
+            @Override
+            public void onGeoQueryReady() {
+
+            }
+
+            @Override
+            public void onGeoQueryError(DatabaseError error) {
+                if (!isDriverFound) {
+                    radius++;
+                    findDriver();
+                }
+            }
+        });
+    }
+
+    @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        switch (requestCode)
-        {
+        switch (requestCode) {
             case MY_PERMISSION_REQUEST_CODE:
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
-                {
-                    if (checkPlayServices())
-                    {
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    if (checkPlayServices()) {
                         buildGoogleApiClient();
                         createLocationRequest();
                         displayLocation();
@@ -170,18 +217,14 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
 
     private void setUpLocation() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-        {
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             //Request runtime permission
-            ActivityCompat.requestPermissions(this, new String[] {
+            ActivityCompat.requestPermissions(this, new String[]{
                     Manifest.permission.ACCESS_COARSE_LOCATION,
                     Manifest.permission.ACCESS_FINE_LOCATION
             }, MY_PERMISSION_REQUEST_CODE);
-        }
-        else
-        {
-            if (checkPlayServices())
-            {
+        } else {
+            if (checkPlayServices()) {
                 buildGoogleApiClient();
                 createLocationRequest();
                 displayLocation();
@@ -191,37 +234,88 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
 
     private void displayLocation() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-        {
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
         mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
-        if (mLastLocation != null)
-        {
+        if (mLastLocation != null) {
 
-                final double latitude = mLastLocation.getLatitude();
-                final double longitude = mLastLocation.getLongitude();
+            final double latitude = mLastLocation.getLatitude();
+            final double longitude = mLastLocation.getLongitude();
 
-                //Update to Firebase
-                geoFire.setLocation(FirebaseAuth.getInstance().getCurrentUser().getUid(), new GeoLocation(latitude, longitude), new GeoFire.CompletionListener() {
-                    @Override
-                    public void onComplete(String key, DatabaseError error) {
-                        //Add Marker
-                        if (mUserMarker != null)
-                            mUserMarker.remove();
-                        mUserMarker = mMap.addMarker(new MarkerOptions()
-                                .position(new LatLng(latitude,longitude))
-                                .title("Вы"));
-                        //Move camera to this postion
-                        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(latitude,longitude), 15.0f));
-                    }
-                });
 
-        }
-        else
-        {
+            //Add Marker
+            if (mUserMarker != null)
+                mUserMarker.remove();
+            mUserMarker = mMap.addMarker(new MarkerOptions()
+                    .position(new LatLng(latitude, longitude))
+                    .title("Вы"));
+            //Move camera to this postion
+            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(latitude, longitude), 15.0f));
+
+            loadAllAvailableDriver();
+
+            Log.d("LOCATION", String.format("Каординаты: %f / %f", latitude, longitude));
+        } else {
             Log.d("ERROR", "Connot get your location");
         }
+    }
+
+    private void loadAllAvailableDriver() {
+        DatabaseReference driverLocation = FirebaseDatabase.getInstance().getReference(Common.driver_tbl);
+        GeoFire gf = new GeoFire(driverLocation);
+
+        GeoQuery geoQuery = gf.queryAtLocation(new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()), distance);
+        geoQuery.removeAllListeners();
+
+        geoQuery.addGeoQueryEventListener(new GeoQueryEventListener() {
+            @Override
+            public void onKeyEntered(String key, final GeoLocation location) {
+                FirebaseDatabase.getInstance().getReference(Common.user_driver_tbl)
+                        .child(key)
+                        .addListenerForSingleValueEvent(new ValueEventListener() {
+                            @Override
+                            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                                Rider rider = dataSnapshot.getValue(Rider.class);
+                                mMap.addMarker(new MarkerOptions()
+                                        .position(new LatLng(location.latitude, location.longitude))
+                                        .flat(true)
+                                        .title("Имя : " + rider.getName())
+                                        .snippet("Телефон : " + rider.getPhone())
+                                        .icon(BitmapDescriptorFactory.fromResource(R.drawable.car)));
+                            }
+
+                            @Override
+                            public void onCancelled(@NonNull DatabaseError databaseError) {
+
+                            }
+                        });
+            }
+
+            @Override
+            public void onKeyExited(String key) {
+
+            }
+
+            @Override
+            public void onKeyMoved(String key, GeoLocation location) {
+
+            }
+
+            @Override
+            public void onGeoQueryReady() {
+                if (distance <= LIMIT)
+                {
+                    distance++;
+                    loadAllAvailableDriver();
+                }
+            }
+
+            @Override
+            public void onGeoQueryError(DatabaseError error) {
+
+            }
+        });
     }
 
     private void createLocationRequest() {
@@ -243,12 +337,10 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
 
     private boolean checkPlayServices() {
         int resultCode = GooglePlayServicesUtil.isGooglePlayServicesAvailable(this);
-        if (resultCode != ConnectionResult.SUCCESS)
-        {
+        if (resultCode != ConnectionResult.SUCCESS) {
             if (GooglePlayServicesUtil.isUserRecoverableError(resultCode))
                 GooglePlayServicesUtil.getErrorDialog(resultCode, this, PLAY_SERVICE_RES_REQUEST).show();
-            else
-            {
+            else {
                 Toast.makeText(this, "Это устройство не поддерживается", Toast.LENGTH_SHORT).show();
                 finish();
             }
@@ -279,34 +371,33 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         mMap.setInfoWindowAdapter(new CustomInfoWindow(this));
     }
 
-            @Override
-            public void onConnected(@Nullable Bundle bundle) {
-                displayLocation();
-                startLocationUpdates();
-            }
+    @Override
+    public void onConnected(@Nullable Bundle bundle) {
+        displayLocation();
+        startLocationUpdates();
+    }
 
-            private void startLocationUpdates() {
-                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-                        ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-                {
-                    return;
-                }
-                LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest,this);
-            }
-
-            @Override
-            public void onConnectionSuspended(int i) {
-                mGoogleApiClient.connect();
-            }
-
-            @Override
-            public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-
-            }
-
-            @Override
-            public void onLocationChanged(Location location) {
-                mLastLocation = location;
-                displayLocation();
-            }
+    private void startLocationUpdates() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
         }
+        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+        mGoogleApiClient.connect();
+    }
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+        mLastLocation = location;
+        displayLocation();
+    }
+}
