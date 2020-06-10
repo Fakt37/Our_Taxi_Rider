@@ -16,7 +16,7 @@ public class Common {
     private static double time_rate = 1.5;
     private static double distance_fare = 5.0;
 
-    public  static double getPrice (double km, int min)
+    public static double getPrice (double km, int min)
     {
         return (base_fare+(time_rate*min)+(distance_fare*km));
     }
