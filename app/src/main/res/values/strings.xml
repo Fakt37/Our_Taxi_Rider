@@ -12,5 +12,6 @@
     <string name="menu_home">Home</string>
     <string name="menu_gallery">Gallery</string>
     <string name="menu_slideshow">Slideshow</string>
+    <string name="google_direction_api">AIzaSyD7gu9NGtAuzGL9ztioZYJcIJZhqk7vjIM</string>
     <string name="places_api">AIzaSyAmYW9vpePBpHCtNe-cDYYyTcIBoWkVqJM</string>
 </resources>

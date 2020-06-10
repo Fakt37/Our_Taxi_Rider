@@ -2,6 +2,7 @@ package com.example.ourtaxirider;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.location.Location;
 import android.os.Bundle;
 import android.util.Log;
@@ -36,6 +37,7 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.MapStyleOptions;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnFailureListener;
@@ -98,7 +100,7 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
     DatabaseReference ref;
     GeoFire geoFire;
 
-    Marker mUserMarker;
+    Marker mUserMarker, markerDestination;
 
     ImageView imgExpandable;
     BottomSheetRiderFragment mBottomSheet;
@@ -158,16 +160,16 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
             }
         });
 
-
+        RectangularBounds bounds = RectangularBounds.newInstance
+                (new LatLng(56.9972, 40.9714),new LatLng(57.252601, 41.106189));
         place_destination = (AutocompleteSupportFragment) getSupportFragmentManager().findFragmentById(R.id.place_destination);
         place_location = (AutocompleteSupportFragment) getSupportFragmentManager().findFragmentById(R.id.place_location);
-        place_location.setPlaceFields(placeFields).setCountry("ru");
-        place_destination.setPlaceFields(placeFields).setCountry("ru");
-
+        place_location.setPlaceFields(placeFields).setLocationBias(bounds).setTypeFilter(TypeFilter.ADDRESS).setCountry("ru");
+        place_destination.setPlaceFields(placeFields).setCountry("ru").setLocationBias(bounds).setTypeFilter(TypeFilter.ADDRESS);
         place_location.setOnPlaceSelectedListener(new PlaceSelectionListener() {
             @Override
             public void onPlaceSelected(Place place) {
-                mPlaceLocation = place.getAddress();
+                mPlaceLocation = place.getName();
                 mMap.clear();
                 mUserMarker =mMap.addMarker(new MarkerOptions().position(place.getLatLng())
                         .icon(BitmapDescriptorFactory.defaultMarker())
@@ -183,7 +185,7 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         place_destination.setOnPlaceSelectedListener(new PlaceSelectionListener() {
             @Override
             public void onPlaceSelected(Place place) {
-                mPlaceDestination = place.getAddress();
+                mPlaceDestination = place.getName();
                 mMap.addMarker(new MarkerOptions()
                         .position(place.getLatLng())
                         .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
@@ -514,10 +516,40 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
+        try {
+            boolean isSuccess = googleMap.setMapStyle(
+                    MapStyleOptions.loadRawResourceStyle(this, R.raw.my_style_map)
+            );
+            if (!isSuccess)
+                Log.e("ERROR", "Ошибка загрузки стилей!");
+        }
+        catch (Resources.NotFoundException ex)
+        {
+            ex.printStackTrace();
+        }
         mMap = googleMap;
         mMap.getUiSettings().setZoomControlsEnabled(true);
         mMap.getUiSettings().setZoomGesturesEnabled(true);
         mMap.setInfoWindowAdapter(new CustomInfoWindow(this));
+
+        mMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
+            @Override
+            public void onMapClick(LatLng latLng) {
+                if (markerDestination != null)
+                    markerDestination.remove();
+                markerDestination = mMap.addMarker(new MarkerOptions()
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
+                        .position(latLng)
+                        .title("Куда поедите"));
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15.0f));
+
+                BottomSheetRiderFragment mBottomSheet = (BottomSheetRiderFragment) BottomSheetRiderFragment.newInstance(String.format("%s, %s", mLastLocation.getLatitude(), mLastLocation.getLongitude()),
+                        String.format("%s, %s", latLng.latitude, latLng.longitude),
+                        true);
+                mBottomSheet.show(getSupportFragmentManager(), mBottomSheet.getTag());
+
+            }
+        });
     }
 
     @Override
