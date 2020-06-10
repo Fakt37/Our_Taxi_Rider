@@ -12,14 +12,14 @@
         tools:layout="@layout/fragment_home" />
 
     <fragment
-        android:id="@+id/nav_gallery"
-        android:name="com.example.ourtaxirider.ui.gallery.GalleryFragment"
-        android:label="@string/menu_gallery"
-        tools:layout="@layout/fragment_gallery" />
+        android:id="@+id/nav_sign_out"
+        android:name="com.example.ourtaxirider.ui.home.HomeFragment"
+        android:label="Выход"
+        tools:layout="@layout/activity_main" />
 
     <fragment
-        android:id="@+id/nav_slideshow"
+        android:id="@+id/nav_change_pwd"
         android:name="com.example.ourtaxirider.ui.slideshow.SlideshowFragment"
-        android:label="@string/menu_slideshow"
-        tools:layout="@layout/fragment_slideshow" />
+        android:label="Изменить пароль"
+        tools:layout="@layout/layout_change_pwd" />
 </navigation>

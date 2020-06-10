@@ -1,11 +1,14 @@
 package com.example.ourtaxirider;
 
 import android.Manifest;
+import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.location.Location;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Menu;
 import android.widget.Button;
@@ -40,8 +43,10 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MapStyleOptions;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 import com.google.android.libraries.places.api.Places;
 import com.google.android.libraries.places.api.model.Place;
 import com.google.android.libraries.places.api.model.RectangularBounds;
@@ -50,6 +55,8 @@ import com.google.android.libraries.places.api.net.PlacesClient;
 import com.google.android.libraries.places.widget.AutocompleteSupportFragment;
 import com.google.android.libraries.places.widget.listener.PlaceSelectionListener;
 import com.google.android.material.navigation.NavigationView;
+import com.google.firebase.auth.AuthCredential;
+import com.google.firebase.auth.EmailAuthProvider;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
@@ -59,11 +66,14 @@ import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.iid.FirebaseInstanceId;
 import com.google.firebase.iid.InstanceIdResult;
 import com.google.gson.Gson;
+import com.rengwuxian.materialedittext.MaterialEditText;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.app.ActivityCompat;
 import androidx.navigation.NavController;
+import androidx.navigation.NavDestination;
 import androidx.navigation.Navigation;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
@@ -72,8 +82,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import dmax.dialog.SpotsDialog;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -138,12 +151,30 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         // Passing each menu ID as a set of Ids because each
         // menu should be considered as top level destinations.
         mAppBarConfiguration = new AppBarConfiguration.Builder(
-                R.id.nav_home, R.id.nav_gallery, R.id.nav_slideshow)
+                R.id.nav_home, R.id.nav_sign_out,R.id.nav_change_pwd)
                 .setDrawerLayout(drawer)
                 .build();
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment);
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
+
+        navController.addOnDestinationChangedListener(new NavController.OnDestinationChangedListener() {
+            @Override
+            public void onDestinationChanged(@NonNull NavController controller, @NonNull NavDestination destination, @Nullable Bundle arguments) {
+                int menuId = destination.getId();
+
+                switch (menuId){
+                    case R.id.nav_sign_out:
+                        singOut();
+                        break;
+                    case R.id.nav_change_pwd:
+                        showDialogChangePwd();
+                    default:
+                        break;
+
+                }
+            }
+        });
 
         //Maps
         mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
@@ -205,6 +236,102 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         setUpLocation();
 
         updateFirebaseToken();
+    }
+
+    private void showDialogChangePwd() {
+        AlertDialog.Builder alertDialog = new AlertDialog.Builder(Home.this);
+        alertDialog.setTitle("ИЗМЕНЕНИЕ ПАРОЛЯ");
+        alertDialog.setMessage("Заполните все поля");
+
+        LayoutInflater inflater = this.getLayoutInflater();
+        View layout_pwd = inflater.inflate(R.layout.layout_change_pwd, null);
+
+        final MaterialEditText edtPassword = (MaterialEditText)layout_pwd.findViewById(R.id.edtPassword);
+        final MaterialEditText edtNewPassword = (MaterialEditText)layout_pwd.findViewById(R.id.edtNewPassword);
+        final MaterialEditText edtRepeatPassword = (MaterialEditText)layout_pwd.findViewById(R.id.edtRepeatPassword);
+
+        alertDialog.setView(layout_pwd);
+
+        alertDialog.setPositiveButton("ИЗМЕНИТЬ", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                final android.app.AlertDialog waitingDialog = new SpotsDialog.Builder().setContext(Home.this).build();
+                waitingDialog.setMessage("Загрузка .....");
+                waitingDialog.show();
+
+                if (edtNewPassword.getText().toString().equals(edtRepeatPassword.getText().toString()))
+                {
+                    String email = FirebaseAuth.getInstance().getCurrentUser().getEmail();
+                    AuthCredential credential = EmailAuthProvider.getCredential(email, edtPassword.getText().toString());
+                    FirebaseAuth.getInstance().getCurrentUser()
+                            .reauthenticate(credential)
+                            .addOnCompleteListener(new OnCompleteListener<Void>() {
+                                @Override
+                                public void onComplete(@NonNull Task<Void> task) {
+                                    if (task.isSuccessful())
+                                    {
+                                        FirebaseAuth.getInstance().getCurrentUser()
+                                                .updatePassword(edtRepeatPassword.getText().toString())
+                                                .addOnCompleteListener(new OnCompleteListener<Void>() {
+                                                    @Override
+                                                    public void onComplete(@NonNull Task<Void> task) {
+                                                        if (task.isSuccessful())
+                                                        {
+                                                            //Update info password column
+                                                            Map<String, Object> password = new HashMap<>();
+                                                            password.put("password", edtRepeatPassword.getText().toString());
+                                                            DatabaseReference driverInformation = FirebaseDatabase.getInstance().getReference(Common.user_driver_tbl);
+                                                            driverInformation.child(FirebaseAuth.getInstance().getCurrentUser().getUid())
+                                                                    .updateChildren(password)
+                                                                    .addOnCompleteListener(new OnCompleteListener<Void>() {
+                                                                        @Override
+                                                                        public void onComplete(@NonNull Task<Void> task) {
+                                                                            if (task.isSuccessful())
+                                                                                Toast.makeText(Home.this, "Пароль изменён", Toast.LENGTH_SHORT).show();
+                                                                            else
+                                                                                Toast.makeText(Home.this, "Пароль изменён, но не обновлён в базе данных", Toast.LENGTH_SHORT).show();
+                                                                            waitingDialog.dismiss();
+                                                                        }
+                                                                    });
+
+                                                        }
+                                                        else
+                                                        {
+                                                            Toast.makeText(Home.this, "Пароль не может быть изменён", Toast.LENGTH_SHORT).show();
+                                                        }
+
+                                                    }
+                                                });
+                                    }
+                                    else
+                                    {
+                                        waitingDialog.dismiss();
+                                        Toast.makeText(Home.this, "Старый пароль не верный", Toast.LENGTH_SHORT).show();
+                                    }
+                                }
+                            });
+                }
+                else
+                {
+                    waitingDialog.dismiss();
+                    Toast.makeText(Home.this, "Пароли не совпадают", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        alertDialog.setNegativeButton("ОТМЕНА", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+            }
+        });
+        alertDialog.show();
+    }
+
+    private void singOut() {
+        FirebaseAuth.getInstance().signOut();
+        Intent intent = new Intent(Home.this, MainActivity.class);
+        startActivity(intent);
+        finish();
     }
 
     private void initPlaces() {

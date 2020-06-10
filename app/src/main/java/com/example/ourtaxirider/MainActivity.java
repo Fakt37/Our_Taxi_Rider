@@ -10,14 +10,18 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
 
 import com.example.ourtaxirider.Common.Common;
 import com.example.ourtaxirider.Model.Rider;
+import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
@@ -37,6 +41,8 @@ public class MainActivity extends AppCompatActivity {
     DatabaseReference users;
 
     private final static int PERMISSION = 1000;
+    
+    TextView txt_forgot_pwd;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -59,6 +65,14 @@ public class MainActivity extends AppCompatActivity {
         btnRegister = (Button)findViewById(R.id.btnRegister);
         btnSignIn = (Button)findViewById(R.id.btnSignIn);
         rootLayout = (RelativeLayout)findViewById(R.id.rootLayout);
+        txt_forgot_pwd = (TextView)findViewById(R.id.txt_forgot_password);
+        txt_forgot_pwd.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                showDialogForgotPwd();
+                return false;
+            }
+        });
         //Event
         btnRegister.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -72,6 +86,55 @@ public class MainActivity extends AppCompatActivity {
                 showLoginDialog();
             }
         });
+    }
+
+    private void showDialogForgotPwd() {
+        AlertDialog.Builder alertDialog = new AlertDialog.Builder(MainActivity.this);
+        alertDialog.setTitle("ВОССТАНОВЛЕНИЕ ПАРОЛЯ");
+        alertDialog.setMessage("Введите Email ");
+
+        LayoutInflater inflater = LayoutInflater.from(MainActivity.this);
+        View forgot_pwd_layout = inflater.inflate(R.layout.layout_forgot_pwd, null);
+        final MaterialEditText edtEmail = (MaterialEditText)forgot_pwd_layout.findViewById(R.id.edtEmail);
+        alertDialog.setView(forgot_pwd_layout);
+
+        alertDialog.setPositiveButton("СБРОСИТЬ", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(final DialogInterface dialog, int which) {
+                final AlertDialog waitingDialog = new SpotsDialog.Builder().setContext(MainActivity.this).build();
+                waitingDialog.setMessage("Загрузка .....");
+                waitingDialog.show();
+
+                auth.sendPasswordResetEmail(edtEmail.getText().toString().trim())
+                        .addOnCompleteListener(new OnCompleteListener<Void>() {
+                            @Override
+                            public void onComplete(@NonNull Task<Void> task) {
+                                dialog.dismiss();
+                                waitingDialog.dismiss();
+
+                                Snackbar.make(rootLayout, "Ссылка отправлена на почту", Snackbar.LENGTH_SHORT)
+                                        .show();
+                            }
+                        })
+                        .addOnFailureListener(new OnFailureListener() {
+                            @Override
+                            public void onFailure(@NonNull Exception e) {
+                                dialog.dismiss();
+                                waitingDialog.dismiss();
+
+                                Snackbar.make(rootLayout, "Ошибка сброса пароля!"+e.getMessage(), Snackbar.LENGTH_SHORT)
+                                        .show();
+                            }
+                        });
+            }
+        });
+        alertDialog.setNegativeButton("ОТМЕНА", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+            }
+        });
+        alertDialog.show();
     }
 
     private void showLoginDialog() {
