@@ -26,6 +26,7 @@ import com.firebase.geofire.GeoQueryEventListener;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.Status;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
@@ -39,9 +40,13 @@ import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.libraries.places.api.Places;
 import com.google.android.libraries.places.api.model.Place;
+import com.google.android.libraries.places.api.model.RectangularBounds;
+import com.google.android.libraries.places.api.model.TypeFilter;
 import com.google.android.libraries.places.api.net.PlacesClient;
 import com.google.android.libraries.places.widget.AutocompleteSupportFragment;
+import com.google.android.libraries.places.widget.listener.PlaceSelectionListener;
 import com.google.android.material.navigation.NavigationView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
@@ -111,7 +116,9 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
 
     PlacesClient placesClient;
     List<Place.Field> placeFields = Arrays.asList(Place.Field.ID, Place.Field.NAME, Place.Field.LAT_LNG);
-    AutocompleteSupportFragment place_location, place_destination;
+    AutocompleteSupportFragment place_location,place_destination;
+
+    String mPlaceLocation, mPlaceDestination;
 
     private AppBarConfiguration mAppBarConfiguration;
 
@@ -121,7 +128,7 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         setContentView(R.layout.activity_home);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-
+        initPlaces();
         mService = Common.getFCMService();
 
         DrawerLayout drawer = findViewById(R.id.drawer_layout);
@@ -140,15 +147,6 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
 
-
-        imgExpandable = (ImageView) findViewById(R.id.imgExpandable);
-        mBottomSheet = BottomSheetRiderFragment.newInstance("Rider bottom sheet");
-        imgExpandable.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mBottomSheet.show(getSupportFragmentManager(), mBottomSheet.getTag());
-            }
-        });
         btnPickupRequest = (Button) findViewById(R.id.btnPickup);
         btnPickupRequest.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -161,9 +159,55 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         });
 
 
+        place_destination = (AutocompleteSupportFragment) getSupportFragmentManager().findFragmentById(R.id.place_destination);
+        place_location = (AutocompleteSupportFragment) getSupportFragmentManager().findFragmentById(R.id.place_location);
+        place_location.setPlaceFields(placeFields).setCountry("ru");
+        place_destination.setPlaceFields(placeFields).setCountry("ru");
+
+        place_location.setOnPlaceSelectedListener(new PlaceSelectionListener() {
+            @Override
+            public void onPlaceSelected(Place place) {
+                mPlaceLocation = place.getAddress();
+                mMap.clear();
+                mUserMarker =mMap.addMarker(new MarkerOptions().position(place.getLatLng())
+                        .icon(BitmapDescriptorFactory.defaultMarker())
+                        .title("Pickup here"));
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(place.getLatLng(), 15.0f));
+            }
+
+            @Override
+            public void onError(Status status) {
+
+            }
+        });
+        place_destination.setOnPlaceSelectedListener(new PlaceSelectionListener() {
+            @Override
+            public void onPlaceSelected(Place place) {
+                mPlaceDestination = place.getAddress();
+                mMap.addMarker(new MarkerOptions()
+                        .position(place.getLatLng())
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
+                        .title("Куда поедите")
+                );
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(place.getLatLng(), 15.0f));
+                BottomSheetRiderFragment mBottomSheet = (BottomSheetRiderFragment) BottomSheetRiderFragment.newInstance(mPlaceLocation, mPlaceDestination, false);
+                mBottomSheet.show(getSupportFragmentManager(), mBottomSheet.getTag());
+            }
+
+            @Override
+            public void onError(Status status) {
+
+            }
+        });
+
         setUpLocation();
 
         updateFirebaseToken();
+    }
+
+    private void initPlaces() {
+        Places.initialize(getApplicationContext(), getString(R.string.places_api));
+        placesClient = Places.createClient(this);
     }
 
     private void updateFirebaseToken() {
@@ -255,7 +299,7 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
                     isDriverFound = true;
                     driverId = key;
                     btnPickupRequest.setText("Вызвать водителя");
-                    Toast.makeText(Home.this, "" + key, Toast.LENGTH_SHORT).show();
+                    //Toast.makeText(Home.this, "" + key, Toast.LENGTH_SHORT).show();
                 }
             }
 
@@ -276,9 +320,14 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
 
             @Override
             public void onGeoQueryError(DatabaseError error) {
-                if (!isDriverFound) {
+                if (!isDriverFound && radius < LIMIT) {
                     radius++;
                     findDriver();
+                }
+                else
+                {
+                    Toast.makeText(Home.this, "Нет свободных водителей", Toast.LENGTH_SHORT).show();
+                    btnPickupRequest.setText("Новый заказ");
                 }
             }
         });
@@ -327,7 +376,7 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
             driversAvailable.addValueEventListener(new ValueEventListener() {
                 @Override
                 public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                    loadAllAvailableDriver();
+                    loadAllAvailableDriver(new LatLng(mLastLocation.getLatitude(),mLastLocation.getLongitude()));
                 }
 
                 @Override
@@ -349,7 +398,7 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
             //Move camera to this postion
             mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(latitude, longitude), 15.0f));
 
-            loadAllAvailableDriver();
+            loadAllAvailableDriver(new LatLng(mLastLocation.getLatitude(),mLastLocation.getLongitude()));
 
             Log.d("LOCATION", String.format("Каординаты: %f / %f", latitude, longitude));
         } else {
@@ -357,15 +406,15 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         }
     }
 
-    private void loadAllAvailableDriver() {
+    private void loadAllAvailableDriver(final LatLng location) {
         mMap.clear();
-        mMap.addMarker(new MarkerOptions().position(new LatLng(mLastLocation.getLatitude(),mLastLocation.getLongitude())).title("Вы"));
+        mMap.addMarker(new MarkerOptions().position(location).title("Вы"));
 
 
         DatabaseReference driverLocation = FirebaseDatabase.getInstance().getReference(Common.driver_tbl);
         GeoFire gf = new GeoFire(driverLocation);
 
-        GeoQuery geoQuery = gf.queryAtLocation(new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()), distance);
+        GeoQuery geoQuery = gf.queryAtLocation(new GeoLocation(location.latitude, location.longitude), distance);
         geoQuery.removeAllListeners();
 
         geoQuery.addGeoQueryEventListener(new GeoQueryEventListener() {
@@ -407,7 +456,7 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
                 if (distance <= LIMIT)
                 {
                     distance++;
-                    loadAllAvailableDriver();
+                    loadAllAvailableDriver(location);
                 }
             }
 
