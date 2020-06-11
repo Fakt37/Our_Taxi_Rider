@@ -119,8 +119,6 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
     BottomSheetRiderFragment mBottomSheet;
     Button btnPickupRequest;
 
-    boolean isDriverFound = false;
-    String driverId = "";
     int radius = 1;
     int distance = 1;
     private static final int LIMIT = 3;
@@ -184,10 +182,10 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         btnPickupRequest.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if(!isDriverFound)
+                if(!Common.isDriverFound)
                     requestPickupHere(FirebaseAuth.getInstance().getCurrentUser().getUid());
                 else
-                    sendRequestToDriver(driverId);
+                    sendRequestToDriver(Common.driverId);
             }
         });
 
@@ -419,14 +417,14 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         final DatabaseReference drivers = FirebaseDatabase.getInstance().getReference(Common.driver_tbl);
         GeoFire gfDrivers = new GeoFire(drivers);
 
-        GeoQuery geoQuery = gfDrivers.queryAtLocation(new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()), radius);
+        final GeoQuery geoQuery = gfDrivers.queryAtLocation(new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()), radius);
         geoQuery.removeAllListeners();
         geoQuery.addGeoQueryEventListener(new GeoQueryEventListener() {
             @Override
             public void onKeyEntered(String key, GeoLocation location) {
-                if (!isDriverFound) {
-                    isDriverFound = true;
-                    driverId = key;
+                if (!Common.isDriverFound) {
+                    Common.isDriverFound = true;
+                    Common. driverId = key;
                     btnPickupRequest.setText("Вызвать водителя");
                     //Toast.makeText(Home.this, "" + key, Toast.LENGTH_SHORT).show();
                 }
@@ -449,14 +447,18 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
 
             @Override
             public void onGeoQueryError(DatabaseError error) {
-                if (!isDriverFound && radius < LIMIT) {
+                if (!Common.isDriverFound && radius < LIMIT) {
                     radius++;
                     findDriver();
                 }
                 else
                 {
-                    Toast.makeText(Home.this, "Нет свободных водителей", Toast.LENGTH_SHORT).show();
-                    btnPickupRequest.setText("Новый заказ");
+                    if (!Common.isDriverFound)
+                    {
+                        Toast.makeText(Home.this, "Нет свободных водителей", Toast.LENGTH_SHORT).show();
+                        btnPickupRequest.setText("Новый заказ");
+                        geoQuery.removeAllListeners();
+                    }
                 }
             }
         });

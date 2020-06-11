@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat;
 import com.example.ourtaxirider.Common.Common;
 import com.example.ourtaxirider.Model.Token;
 import com.example.ourtaxirider.R;
+import com.example.ourtaxirider.RateActivity;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
@@ -25,6 +26,8 @@ import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 import com.google.gson.Gson;
 
+import java.util.Objects;
+
 public class MyFirebaseMessaging extends FirebaseMessagingService {
     @Override
     public void onNewToken(String refreshedToken) {
@@ -34,7 +37,7 @@ public class MyFirebaseMessaging extends FirebaseMessagingService {
 
     @Override
     public void onMessageReceived(final RemoteMessage remoteMessage) {
-        if (remoteMessage.getNotification().getTitle().equals("Отмена"))
+        if (Objects.equals(Objects.requireNonNull(remoteMessage.getNotification()).getTitle(), "Отмена"))
         {
             Handler handler = new Handler(Looper.getMainLooper());
             handler.post(new Runnable() {
@@ -44,10 +47,20 @@ public class MyFirebaseMessaging extends FirebaseMessagingService {
                 }
             });
         }
-        else if (remoteMessage.getNotification().getTitle().equals("Прибытие"))
+        else if (Objects.equals(remoteMessage.getNotification().getTitle(), "Прибытие"))
         {
             showArrivedNotification(remoteMessage.getNotification().getBody());
         }
+        else if (Objects.equals(remoteMessage.getNotification().getTitle(), "DropOff"))
+        {
+            openRateActivity(remoteMessage.getNotification().getBody());
+        }
+    }
+
+    private void openRateActivity(String body) {
+        Intent intent = new Intent(this, RateActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
     }
 
     private void showArrivedNotification(String body) {
@@ -62,6 +75,7 @@ public class MyFirebaseMessaging extends FirebaseMessagingService {
                 .setContentText(body)
                 .setContentIntent(contentIntent);
         NotificationManager manager = (NotificationManager)getBaseContext().getSystemService(Context.NOTIFICATION_SERVICE);
+        assert manager != null;
         manager.notify(1,builder.build());
     }
 

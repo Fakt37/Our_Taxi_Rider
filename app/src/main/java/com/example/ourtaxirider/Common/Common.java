@@ -6,11 +6,16 @@ import com.example.ourtaxirider.Remote.IFCMService;
 import com.example.ourtaxirider.Remote.IGoogleAPI;
 
 public class Common {
+
+    public static boolean isDriverFound = false;
+    public static String driverId = "";
+
     public static final String driver_tbl = "Drivers";
     public static final String user_driver_tbl = "DriversInformation";
     public static final String user_rider_tbl = "RidersInformation";
     public static final String pickup_request_tbl = "PickupRequest";
     public static final String token_tbl = "Tokens";
+    public static final String rate_detail_tbl = "RateDetails";
 
     private static double base_fare = 50.0;
     private static double time_rate = 1.5;
