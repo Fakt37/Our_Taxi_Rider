@@ -60,5 +60,6 @@ dependencies {
     implementation 'androidx.multidex:multidex:2.0.1'
     implementation 'com.google.android.libraries.places:places:2.3.0'
     implementation 'me.zhanghai.android.materialratingbar:library:1.4.0'
+    implementation 'io.paperdb:paperdb:2.6'
 
 }

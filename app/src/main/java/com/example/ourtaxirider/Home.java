@@ -87,6 +87,7 @@ import java.util.List;
 import java.util.Map;
 
 import dmax.dialog.SpotsDialog;
+import io.paperdb.Paper;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -326,6 +327,8 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
     }
 
     private void singOut() {
+        Paper.init(this);
+        Paper.book().destroy();
         FirebaseAuth.getInstance().signOut();
         Intent intent = new Intent(Home.this, MainActivity.class);
         startActivity(intent);

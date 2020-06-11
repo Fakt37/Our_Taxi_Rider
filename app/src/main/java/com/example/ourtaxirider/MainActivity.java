@@ -30,6 +30,7 @@ import com.google.firebase.database.FirebaseDatabase;
 import com.rengwuxian.materialedittext.MaterialEditText;
 
 import dmax.dialog.SpotsDialog;
+import io.paperdb.Paper;
 import uk.co.chrisjenx.calligraphy.CalligraphyConfig;
 import uk.co.chrisjenx.calligraphy.CalligraphyContextWrapper;
 
@@ -57,6 +58,7 @@ public class MainActivity extends AppCompatActivity {
                 .setFontAttrId(R.attr.fontPath)
                 .build());
         setContentView(R.layout.activity_main);
+        Paper.init(this);
         //Init Firebase
         auth = FirebaseAuth.getInstance();
         db = FirebaseDatabase.getInstance();
@@ -86,6 +88,44 @@ public class MainActivity extends AppCompatActivity {
                 showLoginDialog();
             }
         });
+
+        // Auto login
+        String user = Paper.book().read(Common.user_field);
+        String pwd = Paper.book().read(Common.pwd_field);
+        if (user != null && pwd != null)
+        {
+            if (!TextUtils.isEmpty(user) && !TextUtils.isEmpty(pwd))
+            {
+                autoLogin(user,pwd);
+            }
+        }
+    }
+
+    private void autoLogin(String user, String pwd) {
+        final AlertDialog waitingDialog= new
+                SpotsDialog.Builder().setContext(MainActivity.this).build();
+        waitingDialog.setMessage("Загрузка .....");
+        waitingDialog.show();
+        //Login
+        auth.signInWithEmailAndPassword(user, pwd)
+                .addOnSuccessListener(new OnSuccessListener<AuthResult>() {
+                    @Override
+                    public void onSuccess(AuthResult authResult) {
+                        waitingDialog.dismiss();
+                        startActivity(new Intent(MainActivity.this, Home.class));
+                        finish();
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        waitingDialog.dismiss();
+                        Snackbar.make(rootLayout, "Ошибка "+e.getMessage(), Snackbar.LENGTH_SHORT)
+                                .show();
+                        //Active button
+                        btnSignIn.setEnabled(true);
+                    }
+                });
     }
 
     private void showDialogForgotPwd() {
@@ -183,6 +223,8 @@ public class MainActivity extends AppCompatActivity {
                             @Override
                             public void onSuccess(AuthResult authResult) {
                                 waitingDialog.dismiss();
+                                Paper.book().write(Common.user_field, edtEmail.getText().toString());
+                                Paper.book().write(Common.pwd_field, edtPassword.getText().toString());
                                 startActivity(new Intent(MainActivity.this, Home.class));
                                 finish();
                             }
