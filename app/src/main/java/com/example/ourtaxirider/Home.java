@@ -9,6 +9,7 @@ import android.content.res.Resources;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -35,8 +36,11 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.Status;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -103,11 +107,11 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class Home<StorageReferences> extends AppCompatActivity implements OnMapReadyCallback,
-        GoogleApiClient.ConnectionCallbacks,
-        GoogleApiClient.OnConnectionFailedListener,
-        LocationListener {
+public class Home extends AppCompatActivity implements OnMapReadyCallback {
     SupportMapFragment mapFragment;
+
+    FusedLocationProviderClient fusedLocationProviderClient;
+    LocationCallback locationCallback;
 
     private GoogleMap mMap;
     //Play Services
@@ -141,7 +145,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
 
     PlacesClient placesClient;
     List<Place.Field> placeFields = Arrays.asList(Place.Field.ID, Place.Field.NAME, Place.Field.LAT_LNG);
-    AutocompleteSupportFragment place_location,place_destination;
+    AutocompleteSupportFragment place_location, place_destination;
 
     String mPlaceLocation, mPlaceDestination;
 
@@ -162,6 +166,8 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
         initPlaces();
         mService = Common.getFCMService();
 
+        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
+
         storage = FirebaseStorage.getInstance();
         storageReference = storage.getReference();
 
@@ -170,7 +176,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
         // Passing each menu ID as a set of Ids because each
         // menu should be considered as top level destinations.
         mAppBarConfiguration = new AppBarConfiguration.Builder(
-                R.id.nav_home, R.id.nav_sign_out,R.id.nav_change_pwd)
+                R.id.nav_home, R.id.nav_sign_out, R.id.nav_change_pwd)
                 .setDrawerLayout(drawer)
                 .build();
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment);
@@ -182,7 +188,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
             public void onDestinationChanged(@NonNull NavController controller, @NonNull NavDestination destination, @Nullable Bundle arguments) {
                 int menuId = destination.getId();
 
-                switch (menuId){
+                switch (menuId) {
                     case R.id.nav_sign_out:
                         singOut();
                         break;
@@ -205,8 +211,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
         imageAvatar = navigationHeaderView.findViewById(R.id.imageAvatar);
 
         //Load avatar
-        if (Common.currentUser.getAvatarUrl() != null && !TextUtils.isEmpty(Common.currentUser.getAvatarUrl()))
-        {
+        if (Common.currentUser.getAvatarUrl() != null && !TextUtils.isEmpty(Common.currentUser.getAvatarUrl())) {
             Picasso.with(this)
                     .load(Common.currentUser.getAvatarUrl())
                     .into(imageAvatar);
@@ -219,7 +224,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
         btnPickupRequest.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if(!Common.isDriverFound)
+                if (!Common.isDriverFound)
                     requestPickupHere(FirebaseAuth.getInstance().getCurrentUser().getUid());
                 else
                     sendRequestToDriver(Common.driverId);
@@ -227,7 +232,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
         });
 
         RectangularBounds bounds = RectangularBounds.newInstance
-                (new LatLng(56.9972, 40.9714),new LatLng(57.252601, 41.106189));
+                (new LatLng(56.9972, 40.9714), new LatLng(57.252601, 41.106189));
         place_destination = (AutocompleteSupportFragment) getSupportFragmentManager().findFragmentById(R.id.place_destination);
         place_location = (AutocompleteSupportFragment) getSupportFragmentManager().findFragmentById(R.id.place_location);
         place_location.setPlaceFields(placeFields).setLocationBias(bounds).setTypeFilter(TypeFilter.ADDRESS).setCountry("ru");
@@ -237,7 +242,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
             public void onPlaceSelected(Place place) {
                 mPlaceLocation = place.getName();
                 mMap.clear();
-                mUserMarker =mMap.addMarker(new MarkerOptions().position(place.getLatLng())
+                mUserMarker = mMap.addMarker(new MarkerOptions().position(place.getLatLng())
                         .icon(BitmapDescriptorFactory.defaultMarker())
                         .title("Pickup here"));
                 mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(place.getLatLng(), 15.0f));
@@ -281,8 +286,8 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
         LayoutInflater inflater = this.getLayoutInflater();
         View layout_pwd = inflater.inflate(R.layout.layout_update_info, null);
 
-        final MaterialEditText edtName = (MaterialEditText)layout_pwd.findViewById(R.id.edtName);
-        final MaterialEditText edtPhone = (MaterialEditText)layout_pwd.findViewById(R.id.edtPhone);
+        final MaterialEditText edtName = (MaterialEditText) layout_pwd.findViewById(R.id.edtName);
+        final MaterialEditText edtPhone = (MaterialEditText) layout_pwd.findViewById(R.id.edtPhone);
         final ImageView image_upload = (ImageView) layout_pwd.findViewById(R.id.image_upload);
         image_upload.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -344,17 +349,15 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == Common.PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null)
-        {
+        if (requestCode == Common.PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
             Uri saveUri = data.getData();
-            if (saveUri != null)
-            {
+            if (saveUri != null) {
                 final ProgressDialog mDialog = new ProgressDialog(this);
                 mDialog.setMessage("Обновление ...");
                 mDialog.show();
 
                 String imageName = UUID.randomUUID().toString();
-                final StorageReference imageFolder = storageReference.child("images/"+imageName);
+                final StorageReference imageFolder = storageReference.child("images/" + imageName);
                 imageFolder.putFile(saveUri)
                         .addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
                             @Override
@@ -385,7 +388,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
                             @Override
                             public void onProgress(@NonNull UploadTask.TaskSnapshot taskSnapshot) {
                                 double progress = (100.0 * taskSnapshot.getBytesTransferred() / taskSnapshot.getTotalByteCount());
-                                mDialog.setMessage("Обновлено "+progress+"%");
+                                mDialog.setMessage("Обновлено " + progress + "%");
                             }
                         });
 
@@ -401,9 +404,9 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
         LayoutInflater inflater = this.getLayoutInflater();
         View layout_pwd = inflater.inflate(R.layout.layout_change_pwd, null);
 
-        final MaterialEditText edtPassword = (MaterialEditText)layout_pwd.findViewById(R.id.edtPassword);
-        final MaterialEditText edtNewPassword = (MaterialEditText)layout_pwd.findViewById(R.id.edtNewPassword);
-        final MaterialEditText edtRepeatPassword = (MaterialEditText)layout_pwd.findViewById(R.id.edtRepeatPassword);
+        final MaterialEditText edtPassword = (MaterialEditText) layout_pwd.findViewById(R.id.edtPassword);
+        final MaterialEditText edtNewPassword = (MaterialEditText) layout_pwd.findViewById(R.id.edtNewPassword);
+        final MaterialEditText edtRepeatPassword = (MaterialEditText) layout_pwd.findViewById(R.id.edtRepeatPassword);
 
         alertDialog.setView(layout_pwd);
 
@@ -414,8 +417,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
                 waitingDialog.setMessage("Загрузка .....");
                 waitingDialog.show();
 
-                if (edtNewPassword.getText().toString().equals(edtRepeatPassword.getText().toString()))
-                {
+                if (edtNewPassword.getText().toString().equals(edtRepeatPassword.getText().toString())) {
                     String email = FirebaseAuth.getInstance().getCurrentUser().getEmail();
                     AuthCredential credential = EmailAuthProvider.getCredential(email, edtPassword.getText().toString());
                     FirebaseAuth.getInstance().getCurrentUser()
@@ -423,15 +425,13 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
                             .addOnCompleteListener(new OnCompleteListener<Void>() {
                                 @Override
                                 public void onComplete(@NonNull Task<Void> task) {
-                                    if (task.isSuccessful())
-                                    {
+                                    if (task.isSuccessful()) {
                                         FirebaseAuth.getInstance().getCurrentUser()
                                                 .updatePassword(edtRepeatPassword.getText().toString())
                                                 .addOnCompleteListener(new OnCompleteListener<Void>() {
                                                     @Override
                                                     public void onComplete(@NonNull Task<Void> task) {
-                                                        if (task.isSuccessful())
-                                                        {
+                                                        if (task.isSuccessful()) {
                                                             //Update info password column
                                                             Map<String, Object> password = new HashMap<>();
                                                             password.put("password", edtRepeatPassword.getText().toString());
@@ -449,25 +449,19 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
                                                                         }
                                                                     });
 
-                                                        }
-                                                        else
-                                                        {
+                                                        } else {
                                                             Toast.makeText(Home.this, "Пароль не может быть изменён", Toast.LENGTH_SHORT).show();
                                                         }
 
                                                     }
                                                 });
-                                    }
-                                    else
-                                    {
+                                    } else {
                                         waitingDialog.dismiss();
                                         Toast.makeText(Home.this, "Старый пароль не верный", Toast.LENGTH_SHORT).show();
                                     }
                                 }
                             });
-                }
-                else
-                {
+                } else {
                     waitingDialog.dismiss();
                     Toast.makeText(Home.this, "Пароли не совпадают", Toast.LENGTH_SHORT).show();
                 }
@@ -524,7 +518,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
                         for (DataSnapshot postSnapShot : dataSnapshot.getChildren()) {
                             Token token = postSnapShot.getValue(Token.class);
 
-                            String json_lat_lng = new Gson().toJson(new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude()));
+                            String json_lat_lng = new Gson().toJson(new LatLng(Common.mLastLocation.getLatitude(), Common.mLastLocation.getLongitude()));
                             String riderToken = FirebaseInstanceId.getInstance().getToken();
                             Notification data = new Notification(riderToken, json_lat_lng);
                             Sender content = new Sender(token.getToken(), data);
@@ -557,14 +551,14 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
     private void requestPickupHere(String uid) {
         DatabaseReference dbRequest = FirebaseDatabase.getInstance().getReference(Common.pickup_request_tbl);
         GeoFire mGeoFire = new GeoFire(dbRequest);
-        mGeoFire.setLocation(uid, new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()));
+        mGeoFire.setLocation(uid, new GeoLocation(Common.mLastLocation.getLatitude(), Common.mLastLocation.getLongitude()));
 
         if (mUserMarker.isVisible())
             mUserMarker.remove();
         mUserMarker = mMap.addMarker(new MarkerOptions()
                 .title("Новый заказ")
                 .snippet("")
-                .position(new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude()))
+                .position(new LatLng(Common.mLastLocation.getLatitude(), Common.mLastLocation.getLongitude()))
                 .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));
         mUserMarker.showInfoWindow();
 
@@ -576,14 +570,14 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
         final DatabaseReference drivers = FirebaseDatabase.getInstance().getReference(Common.driver_tbl);
         GeoFire gfDrivers = new GeoFire(drivers);
 
-        final GeoQuery geoQuery = gfDrivers.queryAtLocation(new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()), radius);
+        final GeoQuery geoQuery = gfDrivers.queryAtLocation(new GeoLocation(Common.mLastLocation.getLatitude(), Common.mLastLocation.getLongitude()), radius);
         geoQuery.removeAllListeners();
         geoQuery.addGeoQueryEventListener(new GeoQueryEventListener() {
             @Override
             public void onKeyEntered(String key, GeoLocation location) {
                 if (!Common.isDriverFound) {
                     Common.isDriverFound = true;
-                    Common. driverId = key;
+                    Common.driverId = key;
                     btnPickupRequest.setText("Вызвать водителя");
                     //Toast.makeText(Home.this, "" + key, Toast.LENGTH_SHORT).show();
                 }
@@ -609,11 +603,8 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
                 if (!Common.isDriverFound && radius < LIMIT) {
                     radius++;
                     findDriver();
-                }
-                else
-                {
-                    if (!Common.isDriverFound)
-                    {
+                } else {
+                    if (!Common.isDriverFound) {
                         Toast.makeText(Home.this, "Нет свободных водителей", Toast.LENGTH_SHORT).show();
                         btnPickupRequest.setText("Новый заказ");
                         geoQuery.removeAllListeners();
@@ -628,11 +619,9 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
         switch (requestCode) {
             case MY_PERMISSION_REQUEST_CODE:
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    if (checkPlayServices()) {
-                        buildGoogleApiClient();
-                        createLocationRequest();
-                        displayLocation();
-                    }
+                    buildLocationCallBack();
+                    createLocationRequest();
+                    displayLocation();
                 }
         }
     }
@@ -646,12 +635,20 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
                     Manifest.permission.ACCESS_FINE_LOCATION
             }, MY_PERMISSION_REQUEST_CODE);
         } else {
-            if (checkPlayServices()) {
-                buildGoogleApiClient();
-                createLocationRequest();
+            buildLocationCallBack();
+            createLocationRequest();
+            displayLocation();
+        }
+    }
+
+    private void buildLocationCallBack() {
+        locationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(LocationResult locationResult) {
+                Common.mLastLocation = locationResult.getLocations().get(locationResult.getLocations().size() - 1);
                 displayLocation();
             }
-        }
+        };
     }
 
     private void displayLocation() {
@@ -659,41 +656,47 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
-        mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
-        if (mLastLocation != null) {
-            //Presense system
-            driversAvailable = FirebaseDatabase.getInstance().getReference(Common.driver_tbl);
-            driversAvailable.addValueEventListener(new ValueEventListener() {
-                @Override
-                public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                    loadAllAvailableDriver(new LatLng(mLastLocation.getLatitude(),mLastLocation.getLongitude()));
+
+        fusedLocationProviderClient.getLastLocation().addOnSuccessListener(new OnSuccessListener<Location>() {
+            @Override
+            public void onSuccess(Location location) {
+                Common.mLastLocation = location;
+                if (Common.mLastLocation != null) {
+                    //Presense system
+                    driversAvailable = FirebaseDatabase.getInstance().getReference(Common.driver_tbl);
+                    driversAvailable.addValueEventListener(new ValueEventListener() {
+                        @Override
+                        public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                            loadAllAvailableDriver(new LatLng(Common.mLastLocation.getLatitude(), Common.mLastLocation.getLongitude()));
+                        }
+
+                        @Override
+                        public void onCancelled(@NonNull DatabaseError databaseError) {
+
+                        }
+                    });
+
+                    final double latitude = Common.mLastLocation.getLatitude();
+                    final double longitude = Common.mLastLocation.getLongitude();
+
+
+                    //Add Marker
+                    if (mUserMarker != null)
+                        mUserMarker.remove();
+                    mUserMarker = mMap.addMarker(new MarkerOptions()
+                            .position(new LatLng(latitude, longitude))
+                            .title("Вы"));
+                    //Move camera to this postion
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(latitude, longitude), 15.0f));
+
+                    loadAllAvailableDriver(new LatLng(Common.mLastLocation.getLatitude(), Common.mLastLocation.getLongitude()));
+
+                    Log.d("LOCATION", String.format("Каординаты: %f / %f", latitude, longitude));
+                } else {
+                    Log.d("ERROR", "Connot get your location");
                 }
-
-                @Override
-                public void onCancelled(@NonNull DatabaseError databaseError) {
-
-                }
-            });
-
-            final double latitude = mLastLocation.getLatitude();
-            final double longitude = mLastLocation.getLongitude();
-
-
-            //Add Marker
-            if (mUserMarker != null)
-                mUserMarker.remove();
-            mUserMarker = mMap.addMarker(new MarkerOptions()
-                    .position(new LatLng(latitude, longitude))
-                    .title("Вы"));
-            //Move camera to this postion
-            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(latitude, longitude), 15.0f));
-
-            loadAllAvailableDriver(new LatLng(mLastLocation.getLatitude(),mLastLocation.getLongitude()));
-
-            Log.d("LOCATION", String.format("Каординаты: %f / %f", latitude, longitude));
-        } else {
-            Log.d("ERROR", "Connot get your location");
-        }
+            }
+        });
     }
 
     private void loadAllAvailableDriver(final LatLng location) {
@@ -743,8 +746,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
 
             @Override
             public void onGeoQueryReady() {
-                if (distance <= LIMIT)
-                {
+                if (distance <= LIMIT) {
                     distance++;
                     loadAllAvailableDriver(location);
                 }
@@ -765,28 +767,6 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
         mLocationRequest.setSmallestDisplacement(DISPLACEMENT);
     }
 
-    private void buildGoogleApiClient() {
-        mGoogleApiClient = new GoogleApiClient.Builder(this)
-                .addConnectionCallbacks(this)
-                .addOnConnectionFailedListener(this)
-                .addApi(LocationServices.API)
-                .build();
-        mGoogleApiClient.connect();
-    }
-
-    private boolean checkPlayServices() {
-        int resultCode = GooglePlayServicesUtil.isGooglePlayServicesAvailable(this);
-        if (resultCode != ConnectionResult.SUCCESS) {
-            if (GooglePlayServicesUtil.isUserRecoverableError(resultCode))
-                GooglePlayServicesUtil.getErrorDialog(resultCode, this, PLAY_SERVICE_RES_REQUEST).show();
-            else {
-                Toast.makeText(this, "Это устройство не поддерживается", Toast.LENGTH_SHORT).show();
-                finish();
-            }
-            return false;
-        }
-        return true;
-    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -810,9 +790,7 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
             );
             if (!isSuccess)
                 Log.e("ERROR", "Ошибка загрузки стилей!");
-        }
-        catch (Resources.NotFoundException ex)
-        {
+        } catch (Resources.NotFoundException ex) {
             ex.printStackTrace();
         }
         mMap = googleMap;
@@ -838,35 +816,11 @@ public class Home<StorageReferences> extends AppCompatActivity implements OnMapR
 
             }
         });
-    }
-
-    @Override
-    public void onConnected(@Nullable Bundle bundle) {
-        displayLocation();
-        startLocationUpdates();
-    }
-
-    private void startLocationUpdates() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
-        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
+        fusedLocationProviderClient.requestLocationUpdates(mLocationRequest, locationCallback, Looper.myLooper());
     }
 
-    @Override
-    public void onConnectionSuspended(int i) {
-        mGoogleApiClient.connect();
-    }
-
-    @Override
-    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-
-    }
-
-    @Override
-    public void onLocationChanged(Location location) {
-        mLastLocation = location;
-        displayLocation();
-    }
 }
