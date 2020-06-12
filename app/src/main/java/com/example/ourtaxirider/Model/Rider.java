@@ -1,7 +1,7 @@
 package com.example.ourtaxirider.Model;
 
 public class Rider {
-    private String name, email, phone, password, avatarUrl, rates;
+    private String name, email, phone, password, avatarUrl;
 
     public Rider() {
     }
@@ -12,7 +12,6 @@ public class Rider {
         this.phone = phone;
         this.password = password;
         this.avatarUrl = avatarUrl;
-        this.rates = rates;
     }
 
     public String getName() {
@@ -55,11 +54,4 @@ public class Rider {
         this.avatarUrl = avatarUrl;
     }
 
-    public String getRates() {
-        return rates;
-    }
-
-    public void setRates(String rates) {
-        this.rates = rates;
-    }
 }

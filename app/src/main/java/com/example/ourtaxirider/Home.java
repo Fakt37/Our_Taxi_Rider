@@ -1,18 +1,22 @@
 package com.example.ourtaxirider;
 
 import android.Manifest;
+import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.location.Location;
+import android.net.Uri;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Menu;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.ourtaxirider.Common.Common;
@@ -65,8 +69,13 @@ import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.iid.FirebaseInstanceId;
 import com.google.firebase.iid.InstanceIdResult;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.OnProgressListener;
+import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
 import com.google.gson.Gson;
 import com.rengwuxian.materialedittext.MaterialEditText;
+import com.squareup.picasso.Picasso;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -85,14 +94,16 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
+import de.hdodenhof.circleimageview.CircleImageView;
 import dmax.dialog.SpotsDialog;
 import io.paperdb.Paper;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class Home extends AppCompatActivity implements OnMapReadyCallback,
+public class Home<StorageReferences> extends AppCompatActivity implements OnMapReadyCallback,
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener,
         LocationListener {
@@ -134,6 +145,12 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
 
     String mPlaceLocation, mPlaceDestination;
 
+    CircleImageView imageAvatar;
+    TextView txtRiderName;
+
+    FirebaseStorage storage;
+    StorageReference storageReference;
+
     private AppBarConfiguration mAppBarConfiguration;
 
     @Override
@@ -144,6 +161,9 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         setSupportActionBar(toolbar);
         initPlaces();
         mService = Common.getFCMService();
+
+        storage = FirebaseStorage.getInstance();
+        storageReference = storage.getReference();
 
         DrawerLayout drawer = findViewById(R.id.drawer_layout);
         NavigationView navigationView = findViewById(R.id.nav_view);
@@ -168,6 +188,10 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
                         break;
                     case R.id.nav_change_pwd:
                         showDialogChangePwd();
+                        break;
+                    case R.id.nav_update_info:
+                        showDialogUpdateInfo();
+                        break;
                     default:
                         break;
 
@@ -175,6 +199,18 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
             }
         });
 
+        View navigationHeaderView = navigationView.getHeaderView(0);
+        txtRiderName = navigationHeaderView.findViewById(R.id.txtRiderName);
+        txtRiderName.setText(String.format("%s", Common.currentUser.getName()));
+        imageAvatar = navigationHeaderView.findViewById(R.id.imageAvatar);
+
+        //Load avatar
+        if (Common.currentUser.getAvatarUrl() != null && !TextUtils.isEmpty(Common.currentUser.getAvatarUrl()))
+        {
+            Picasso.with(this)
+                    .load(Common.currentUser.getAvatarUrl())
+                    .into(imageAvatar);
+        }
         //Maps
         mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
@@ -235,6 +271,126 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback,
         setUpLocation();
 
         updateFirebaseToken();
+    }
+
+    private void showDialogUpdateInfo() {
+        AlertDialog.Builder alertDialog = new AlertDialog.Builder(Home.this);
+        alertDialog.setTitle("ИЗМЕНИТЬ ИНФОРМАЦИЮ");
+        alertDialog.setMessage("Заполните информацию");
+
+        LayoutInflater inflater = this.getLayoutInflater();
+        View layout_pwd = inflater.inflate(R.layout.layout_update_info, null);
+
+        final MaterialEditText edtName = (MaterialEditText)layout_pwd.findViewById(R.id.edtName);
+        final MaterialEditText edtPhone = (MaterialEditText)layout_pwd.findViewById(R.id.edtPhone);
+        final ImageView image_upload = (ImageView) layout_pwd.findViewById(R.id.image_upload);
+        image_upload.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                chooseImage();
+            }
+        });
+
+        alertDialog.setView(layout_pwd);
+        alertDialog.setPositiveButton("ОБНОВИТЬ", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+                final android.app.AlertDialog waitingDialog = new SpotsDialog.Builder().setContext(Home.this).build();
+                waitingDialog.show();
+
+                String name = edtName.getText().toString();
+                String phone = edtPhone.getText().toString();
+
+                Map<String, Object> updateInfo = new HashMap<>();
+                if (!TextUtils.isEmpty(name))
+                    updateInfo.put("name", name);
+                if (!TextUtils.isEmpty(phone))
+                    updateInfo.put("phone", phone);
+
+                DatabaseReference riderInformations = FirebaseDatabase.getInstance().getReference(Common.user_driver_tbl);
+                riderInformations.child(FirebaseAuth.getInstance().getCurrentUser().getUid())
+                        .updateChildren(updateInfo)
+                        .addOnCompleteListener(new OnCompleteListener<Void>() {
+                            @Override
+                            public void onComplete(@NonNull Task<Void> task) {
+                                waitingDialog.dismiss();
+                                if (task.isSuccessful())
+                                    Toast.makeText(Home.this, "Информация обновлена!", Toast.LENGTH_SHORT).show();
+                                else
+                                    Toast.makeText(Home.this, "Ошибка обновления!", Toast.LENGTH_SHORT).show();
+
+                                waitingDialog.dismiss();
+                            }
+                        });
+            }
+        });
+        alertDialog.setNegativeButton("ОТМЕНА", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+            }
+        });
+        alertDialog.show();
+    }
+
+    private void chooseImage() {
+        Intent intent = new Intent();
+        intent.setType("image/*");
+        intent.setAction(Intent.ACTION_GET_CONTENT);
+        startActivityForResult(Intent.createChooser(intent, "Выберите изображениие: "), Common.PICK_IMAGE_REQUEST);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == Common.PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null)
+        {
+            Uri saveUri = data.getData();
+            if (saveUri != null)
+            {
+                final ProgressDialog mDialog = new ProgressDialog(this);
+                mDialog.setMessage("Обновление ...");
+                mDialog.show();
+
+                String imageName = UUID.randomUUID().toString();
+                final StorageReference imageFolder = storageReference.child("images/"+imageName);
+                imageFolder.putFile(saveUri)
+                        .addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
+                            @Override
+                            public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
+                                mDialog.dismiss();
+                                imageFolder.getDownloadUrl().addOnSuccessListener(new OnSuccessListener<Uri>() {
+                                    @Override
+                                    public void onSuccess(Uri uri) {
+                                        Map<String, Object> avatarUpdate = new HashMap<>();
+                                        avatarUpdate.put("avatarUrl", uri.toString());
+                                        DatabaseReference riderInformations = FirebaseDatabase.getInstance().getReference(Common.user_driver_tbl);
+                                        riderInformations.child(FirebaseAuth.getInstance().getCurrentUser().getUid())
+                                                .updateChildren(avatarUpdate)
+                                                .addOnCompleteListener(new OnCompleteListener<Void>() {
+                                                    @Override
+                                                    public void onComplete(@NonNull Task<Void> task) {
+                                                        if (task.isSuccessful())
+                                                            Toast.makeText(Home.this, "Обновлено!", Toast.LENGTH_SHORT).show();
+                                                        else
+                                                            Toast.makeText(Home.this, "Ошибка обновления!", Toast.LENGTH_SHORT).show();
+                                                    }
+                                                });
+                                    }
+                                });
+                            }
+                        })
+                        .addOnProgressListener(new OnProgressListener<UploadTask.TaskSnapshot>() {
+                            @Override
+                            public void onProgress(@NonNull UploadTask.TaskSnapshot taskSnapshot) {
+                                double progress = (100.0 * taskSnapshot.getBytesTransferred() / taskSnapshot.getTotalByteCount());
+                                mDialog.setMessage("Обновлено "+progress+"%");
+                            }
+                        });
+
+            }
+        }
     }
 
     private void showDialogChangePwd() {

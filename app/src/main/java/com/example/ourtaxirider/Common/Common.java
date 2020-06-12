@@ -1,5 +1,6 @@
 package com.example.ourtaxirider.Common;
 
+import com.example.ourtaxirider.Model.Rider;
 import com.example.ourtaxirider.Remote.FCMClient;
 import com.example.ourtaxirider.Remote.GoogleMapAPI;
 import com.example.ourtaxirider.Remote.IFCMService;
@@ -7,8 +8,11 @@ import com.example.ourtaxirider.Remote.IGoogleAPI;
 
 public class Common {
 
+    public static final int PICK_IMAGE_REQUEST = 9999;
     public static boolean isDriverFound = false;
     public static String driverId = "";
+
+    public static Rider currentUser = new Rider();
 
     public static final String user_field = "rider_usr";
     public static final String pwd_field = "rider_pwd";
