@@ -551,7 +551,13 @@ public class Home extends AppCompatActivity implements OnMapReadyCallback {
     private void requestPickupHere(String uid) {
         DatabaseReference dbRequest = FirebaseDatabase.getInstance().getReference(Common.pickup_request_tbl);
         GeoFire mGeoFire = new GeoFire(dbRequest);
-        mGeoFire.setLocation(uid, new GeoLocation(Common.mLastLocation.getLatitude(), Common.mLastLocation.getLongitude()));
+        mGeoFire.setLocation(uid, new GeoLocation(Common.mLastLocation.getLatitude(), Common.mLastLocation.getLongitude()),
+                new GeoFire.CompletionListener() {
+                    @Override
+                    public void onComplete(String key, DatabaseError error) {
+
+                    }
+                });
 
         if (mUserMarker.isVisible())
             mUserMarker.remove();

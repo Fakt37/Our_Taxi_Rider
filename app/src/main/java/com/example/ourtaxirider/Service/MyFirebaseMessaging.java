@@ -57,7 +57,7 @@ public class MyFirebaseMessaging extends FirebaseMessagingService {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 showArrivedNotificationAPI26(remoteMessage.getNotification().getBody());
             else
-            showArrivedNotification(remoteMessage.getNotification().getBody());
+                showArrivedNotification(remoteMessage.getNotification().getBody());
         }
         else if (Objects.equals(remoteMessage.getNotification().getTitle(), "DropOff"))
         {
